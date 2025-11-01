@@ -25,7 +25,7 @@ In Linux:
 - take `out/output/system.img` and replace `system.img` with it
 - start the emulator with the copy of the emulator image:
 
-`~/Library/Android/sdk/emulator/emulator -avd Greatwhite -show-kernel -sysdir greatwhite_sim -selinux permissive -accel on`
+`~/Library/Android/sdk/emulator/emulator -avd Greatwhite -show-kernel -sysdir greatwhite_sim -selinux permissive -accel on -prop qemu.sf.lcd_density=160 -skin 600x600`
 
 ## Tips
 
