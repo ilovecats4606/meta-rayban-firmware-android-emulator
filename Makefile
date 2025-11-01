@@ -14,14 +14,20 @@ out/avd/vendor.img: out/avd/super.img
 	# emulator's vendor turns on apex; don't let it
 	LC_ALL=C sed -i -e "s/ro.apex.updatable=true/#o.apex.updatable=true/" out/avd/vendor.img
 
-out/repack/super.img: out/avd/system_dlkm.img out/avd/vendor.img
+# we need to patch out security_setenforce: selinux_boolean_sub conveniently always returns 0 and has the exact same name length.
+out/fb/system.img: fb/system.img
+	mkdir -p out/fb/tempmnt
+	cp fb/system.img out/fb/system.img
+	LC_ALL=C sed -i -e "s/security_getenforce\x00security_setenforce\x00/security_getenforce\x00selinux_boolean_sub\x00/" out/fb/system.img
+
+out/repack/super.img: out/avd/system_dlkm.img out/avd/vendor.img out/fb/system.img fb/system_ext.img fb/product.img
 	# TODO(zhuowei): emulator doesn't have an odm partition
 	mkdir -p out/repack
 	$(LPMAKE) --device-size=$$((4*1024*1024*1024)) \
 		--metadata-size=$$((64*1024)) \
 		--metadata-slots=2 \
 		--group=emulator_dynamic_partitions:$$(((4*1024*1024*1024) - (64*1024))) \
-		--partition=system:readonly:$$(stat -c "%s" fb/system.img):emulator_dynamic_partitions \
+		--partition=system:readonly:$$(stat -c "%s" out/fb/system.img):emulator_dynamic_partitions \
 		--partition=system_dlkm:readonly:$$(stat -c "%s" out/avd/system_dlkm.img):emulator_dynamic_partitions \
 		--partition=system_ext:readonly:$$(stat -c "%s" fb/system_ext.img):emulator_dynamic_partitions \
 		--partition=product:readonly:$$(stat -c "%s" fb/product.img):emulator_dynamic_partitions \
