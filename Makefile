@@ -1,0 +1,46 @@
+LPUNPACK=../lpunpack_and_lpmake/bin/lpunpack
+LPMAKE=../lpunpack_and_lpmake/bin/lpmake
+
+all: out/output/system.img
+
+# sgdisk -p system.img shows super starts on sector 4096
+out/avd/super.img: avd/system.img
+	mkdir -p out/avd
+	dd if=avd/system.img bs=16M iflag=skip_bytes skip=$$((4096*512)) of=out/avd/super.img
+out/avd/system_dlkm.img: out/avd/super.img
+	$(LPUNPACK) -p system_dlkm out/avd/super.img out/avd
+out/avd/vendor.img: out/avd/super.img
+	$(LPUNPACK) -p vendor out/avd/super.img out/avd
+out/repack/super.img: out/avd/system_dlkm.img out/avd/vendor.img
+	# TODO(zhuowei): emulator doesn't have an odm partition
+	mkdir -p out/repack
+	$(LPMAKE) --device-size=$$((4*1024*1024*1024)) \
+		--metadata-size=$$((64*1024)) \
+		--metadata-slots=2 \
+		--group=emulator_dynamic_partitions:$$(((4*1024*1024*1024) - (64*1024))) \
+		--partition=system:readonly:$$(stat -c "%s" fb/system.img):emulator_dynamic_partitions \
+		--partition=system_dlkm:readonly:$$(stat -c "%s" out/avd/system_dlkm.img):emulator_dynamic_partitions \
+		--partition=system_ext:readonly:$$(stat -c "%s" fb/system_ext.img):emulator_dynamic_partitions \
+		--partition=product:readonly:$$(stat -c "%s" fb/product.img):emulator_dynamic_partitions \
+		--partition=vendor:readonly:$$(stat -c "%s" out/avd/vendor.img):emulator_dynamic_partitions \
+		--image=system=fb/system.img \
+		--image=system_dlkm=out/avd/system_dlkm.img \
+		--image=system_ext=fb/system_ext.img \
+		--image=product=fb/product.img \
+		--image=vendor=out/avd/vendor.img \
+		--output=$@
+
+out/output/system.img: avd/system.img out/repack/super.img
+	mkdir -p out/output
+	# super, vbmeta, 1MB extra for partition table
+	rm -f $@
+	truncate -s $$(((4*1024*1024*1024) + (1*1024*1024) + (1*1024*1024))) $@
+	sgdisk -n 1:2048:4095 $@
+	sgdisk -n 2:4096:0 $@
+	sgdisk -c 1:vbmeta $@
+	sgdisk -c 2:super $@
+	dd if=avd/system.img bs=$$(((4096-2048) * 512)) count=1 iflag=skip_bytes skip=$$((2048*512)) oflag=seek_bytes seek=$$((2048*512)) conv=notrunc of=$@
+	dd if=out/repack/super.img bs=16M oflag=seek_bytes seek=$$((4096*512)) conv=notrunc of=$@
+
+clean:
+	rm -rf out
